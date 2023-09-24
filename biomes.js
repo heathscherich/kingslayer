@@ -1,3 +1,12 @@
+function extend(A, B) {
+  for (key in Object.keys(B)) {
+    if (!(key in Object.keys(A))) {
+      A[key] = B[key]
+    }
+  }
+  return A
+}
+
 var biomes = {
   desert: {
     enemies: {
@@ -14,6 +23,26 @@ var biomes = {
         'jewels': resources.jewels.desert,
         'bone': resources.bone.desert
       },
+      equipment: {
+        'low': {
+          'sling': extend(equipment.low.weapons.range['sling'], { odds: 5 }),
+          'staff': extend(equipment.low.weapons.magic['staff'], { odds: 5 }),
+          'baseball cap': extend(equipment.low.armor.head['baseball cap'], { odds: 5 }),
+          'leather torso': extend(equipment.low.armor.torso['leather torso'], { odds: 5 })
+        },
+        'mid': {
+          'longbow': extend(equipment.mid.weapons.range['longbow'], { odds: 3 }),
+          'cutlass': extend(equipment.mid.weapons.melee['cutlass'], { odds: 3 }),
+          'bone helmet': extend(equipment.mid.armor.head['bone helm'], { odds: 3 }),
+          'chain torso': extend(equipment.mid.armor.torso['chain torso'], { odds: 3 })
+        },
+        'high': {
+          'tome': extend(equipment.high.weapons.magic['tome'], { odds: 2 }),
+          'full helm': extend(equipment.high.armor.head['full helm'], { odds: 2 }),
+          'platebody': extend(equipment.high.armor.torso['platebody'], { odds: 2 })
+        }
+      },
+      reinforcements: reinforcements,
       rare: {
         'relics': resources.relics.desert,
         'vegetables': resources.vegetables.desert,
@@ -49,13 +78,31 @@ var biomes = {
         'meat': resources.meat.jungle,
         'bone': resources.bone.jungle,
         'jewels': resources.polyester.jungle,
-        'planks': resources.planks.jungle,
         'honey': resources.honey.jungle,
         'silk': resources.silk.jungle,
         'mushroom': resources.mushroom.jungle,
-        'paper': resources.paper.jungle,
-        'books': resources.books.jungle
+        'paper': resources.paper.jungle
       },
+      equipment: {
+        'low': {
+          'shortsword': extend(equipment.low.weapons.melee['shortsword'], { odds: 5 }),
+          'dagger': extend(equipment.low.weapons.melee['dagger'], { odds: 5 }),
+          'leather helm': extend(equipment.low.armor.head['leather helm'], { odds: 5 }),
+          'leather chaps': extend(equipment.low.armor.legs['leather chaps'], { odds: 5 })
+        },
+        'mid': {
+          'longsword': extend(equipment.mid.weapons.melee['longsword'], { odds: 3 }),
+          'cutlass': extend(equipment.mid.weapons.melee['cutlass'], { odds: 3 }),
+          'bone helmet': extend(equipment.mid.armor.head['bone helm'], { odds: 3 }),
+          'chainskirt': extend(equipment.mid.armor.legs['chainskirt'], { odds: 3 })
+        },
+        'high': {
+          'greatsword': extend(equipment.high.weapons.melee['greatsword'], { odds: 2 }),
+          'full helm': extend(equipment.high.armor.head['full helm'], { odds: 2 }),
+          'platelegs': extend(equipment.high.armor.legs['platelegs'], { odds: 2 })
+        }
+      },
+      reinforcements: reinforcements,
       rare: {
         'relics': resources.relics.jungle,
         'paper': resources.paper.jungle,
@@ -63,9 +110,7 @@ var biomes = {
         'fruits': resources.fruits.jungle,
         'vegetables': resources.vegetables.jungle,
         'obsidian': resources.obsidian.jungle,
-        'lava': resources.lava.jungle,
         'jewels': resources.jewels.jungle,
-        'glass': resources.glass.jungle,
         'gold': resources.gold.jungle,
         'silver': resources.silver.jungle,
         'coal': resources.coal.jungle,
@@ -97,13 +142,31 @@ var biomes = {
         'fur': resources.fur.city,
         'meat': resources.meat.city,
         'bone': resources.bone.city,
-        'planks': resources.planks.city,
         'jewels': resources.jewels.city,
         'coal': resources.coal.city,
         'polyester': resources.polyester.city,
-        'paper': resources.paper.city,
-        'books': resources.books.city
+        'paper': resources.paper.city
       },
+      equipment: {
+        'low': {
+          'shortbow': extend(equipment.low.weapons.range['shortbow'], { odds: 5 }),
+          'crystal': extend(equipment.low.weapons.magic['crystal'], { odds: 5 }),
+          'bandolier': extend(equipment.low.armor.torso['bandolier'], { odds: 5 }),
+          'leather chaps': extend(equipment.low.armor.legs['leather chaps'], { odds: 5 })
+        },
+        'mid': {
+          'glaive': extend(equipment.mid.weapons.melee['glaive'], { odds: 3 }),
+          'hand crossbow': extend(equipment.mid.weapons.range['hand crossbow'], { odds: 3 }),
+          'catalyst': extend(equipment.mid.weapons.magic['catalyst'], { odds: 3 }),
+          'chainskirt': extend(equipment.mid.armor.legs['chainskirt'], { odds: 3 })
+        },
+        'high': {
+          'hand harpoon': extend(equipment.high.weapons.range['hand harpoon'], { odds: 2 }),
+          'full helm': extend(equipment.high.armor.head['full helm'], { odds: 2 }),
+          'polaris crossbow': extend(equipment.high.weapons.range['polaris crossbow'], { odds: 2 })
+        }
+      },
+      reinforcements: reinforcements,
       rare: {
         'relics': resources.relics.city,
         'paper': resources.paper.city,
@@ -113,9 +176,7 @@ var biomes = {
         'batteries': resources.batteries.city,
         'vegetables': resources.vegetables.city,
         'obsidian': resources.obsidian.city,
-        'lava': resources.lava.city,
         'jewels': resources.jewels.city,
-        'glass': resources.glass.city,
         'gold': resources.gold.city,
         'copper': resources.copper.city,
         'iron': resources.iron.city
@@ -127,7 +188,6 @@ var biomes = {
         'wood': resources.wood.city,
         'rock': resources.rock.city,
         'water': resources.water.city,
-        'glass': resources.glass.city,
         'plastic': resources.plastic.city,
         'vine': resources.vine.city
       }
@@ -150,15 +210,34 @@ var biomes = {
         'coal': resources.coal.ocean,
         'polyester': resources.polyester.ocean
       },
+      equipment: {
+        'low': {
+          'shortsword': extend(equipment.low.weapons.melee['shortsword'], { odds: 5 }),
+          'sickle': extend(equipment.low.weapons.melee['sickle'], { odds: 5 }),
+          'leather helm': extend(equipment.low.armor.head['leather helm'], { odds: 5 }),
+          'leather chaps': extend(equipment.low.armor.legs['leather chaps'], { odds: 5 })
+        },
+        'mid': {
+          'smolbow': extend(equipment.mid.weapons.range['smolbow'], { odds: 3 }),
+          'imbued book': extend(equipment.mid.weapons.magic['imbued book'], { odds: 3 }),
+          'bone helmet': extend(equipment.mid.armor.head['bone helm'], { odds: 3 }),
+          'chainskirt': extend(equipment.mid.armor.legs['chainskirt'], { odds: 3 })
+        },
+        'high': {
+          'greatsword': extend(equipment.high.weapons.melee['greatsword'], { odds: 2 }),
+          'trident': extend(equipment.high.weapons.melee['trident'], { odds: 2 }),
+          'wand': extend(equipment.high.weapons.magic['wand'], { odds: 2 }),
+          'platelegs': extend(equipment.high.armor.legs['platelegs'], { odds: 2 })
+        }
+      },
+      reinforcements: reinforcements,
       rare: {
         'relics': resources.relics.ocean,
         'paper': resources.paper.ocean,
         'plastic': resources.plastic.ocean,
         'vegetables': resources.vegetables.ocean,
         'obsidian': resources.obsidian.ocean,
-        'lava': resources.lava.ocean,
         'jewels': resources.jewels.ocean,
-        'glass': resources.glass.ocean,
         'gold': resources.gold.ocean,
         'tin': resources.tin.ocean,
         'iron': resources.iron.ocean

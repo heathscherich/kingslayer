@@ -1,6 +1,15 @@
 var dirs = [ 3/4*Math.PI, 1/2*Math.PI, 1/4*Math.PI, Math.PI, 0, -3/4*Math.PI, -1/2*Math.PI, -1/4*Math.PI ]
 var modifiers = [ 1, 3, 5, 10 ]
 
+// Box-Muller Transform
+function randomNormal(mean, std) {
+  let u = 1 - Math.random()
+  let v = Math.random()
+  let z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
+
+  return z * std + mean
+}
+
 /**
 * Just an object essentially that takes two arguments
 * First, the number of stacks in the inventory
@@ -44,12 +53,65 @@ class Inventory {
       this.items[item] -= quantity
     }
   }
+  
+  getEqpStats() {
+    let stats = { 'attk': 0, 'skill': 0, 'def': 0 }
+    
+    for (let itemStr in this.items) {
+      let item = equipment.find(itemStr)
+      if (item) {
+        Object.keys(stats).forEach(function(attr) {
+          stats[attr] += item[attr] || 0
+        })
+      }
+    }
+    
+    return stats
+  }
+  
+  getValue() {
+    let sum = 0
+    function scanFilesForValue(item) {
+      for (let i of ['desert', 'jungle', 'city', 'ocean']) {
+        if (resources[item][i]) {
+          return resources[item][i].value
+        }
+      }
+      for (let i of ['low', 'mid', 'high']) {
+        for (let j of ['weapons', 'armor']) {
+          for (let k of ['melee', 'range', 'magic', 'head', 'torso', 'legs', 'ring']) {
+            if (equipment[i][j][k][item]) {
+              return equipment[i][j][k][item].value
+            }
+          }
+        }
+      }
+      return 0
+    }
+    if (Object.keys(this.items).length) {
+      for (let item of Object.keys(this.items)) {
+        sum += scanFilesForValue(item) * this.items[item]
+      }
+    }
+    return sum
+  }
+
+  getAVG() {
+    return this.getValue() / this.items.length
+  }
+}
+
+class Bag extends Inventory {
+	constructor (max) {
+		super(9999, 9999)
+		this.maxValue = max
+	}
 }
 
 class Player {
   constructor() {
     this.strength = 1
-    this.storage = new Inventory(9999, 999999)
+    this.storage = new Inventory(9999, 9999)
   }
 }
 
@@ -96,7 +158,7 @@ class History {
     for (let ii = 0; ii < 10; ii++) {
       this.hist.push([])
       for (let jj = 0; jj < 8; jj++) {
-        this.hist[this.hist.length - 1].push(Math.exp(0))
+        this.hist[this.hist.length - 1].push(100)
       }
     }
   }
@@ -181,6 +243,7 @@ class General extends Unit {
     super()
     
     this.inventory = new Inventory(3, 5)
+    this.inventory.add_item('dagger', 1)
     this.jobs = []
     
     this.temp *= 5
@@ -189,8 +252,12 @@ class General extends Unit {
     this.xp = 0
   }
   
+  getLevel() {
+    return Math.floor(Math.log10(this.xp + 10))
+  }
+  
   progresso() {
-    this.jobs[0].progresso()
+    this.jobs[0].progresso(this)
   }
   
   task_done() {
@@ -202,13 +269,19 @@ class Civilian extends Unit {
   constructor() {
     super()
     
+    this.xp = 0
+    this.health = 100
     this.temp *= 2
     this.inventory = new Inventory(2, 3)
     this.jobs = []
   }
   
+  getLevel() {
+    return Math.floor(Math.log10(this.xp + 10))
+  }
+  
   progresso() {
-    this.jobs[0].progresso()
+    this.jobs[0].progresso(this)
   }
   
   task_done() {
@@ -315,12 +388,27 @@ class BattleJob extends Job {
     return drop
   }
   
-  reward_item() {
-    return this.roll(biomes[this.biome]['tables']['monster'])
+  reward_items(value) {
+    let bag = new Bag(value)
+    
+    while (bag.getValue() < bag.maxValue) {
+      let item = this.roll(biomes[this.biome]['tables']['monster'])
+      bag.add_item(item, 1)
+    }
+    
+    return bag
   }
   
-  progresso() {
-    let dam = 50
+  progresso(unit) {
+    let stats = unit.inventory.getEqpStats()
+    stats = { 'attk': stats['attk'] + unit.getLevel() * 2 + 100, 'skill': stats['skill'] + unit.getLevel() * 2, 'def': stats['def'] + unit.getLevel() * 2 }
+    
+    let dam = randomNormal(stats['attk'], stats['skill'])
+    
+    while (dam > stats['attk'] + stats['attk'] * this.enemies[this.index].defence / 250 || dam < 0) {
+      dam = randomNormal(stats['attk'], stats['skill'])
+    }
+    
     if (this.enemies[this.index].health < dam) {
       dam = this.enemies[this.index].health
     }
@@ -351,120 +439,76 @@ class Arena {
   
   total_habit() {
     let sum = 0
-    for (let ii = 0; ii < this.units.civilians.length; ii++) {
-      sum += Math.abs(this.units.civilians[ii].habit)
+    
+    let units = this.units.civilians.concat(this.units.members).concat(this.units.units)
+    for (let unit of units) {
+      sum += Math.abs(unit.habit)
     }
-    for (let ii = 0; ii < this.units.members.length; ii++) {
-      sum += Math.abs(this.units.members[ii].habit)
-    }
-    for (let ii = 0; ii < this.units.generals.length; ii++) {
-      sum += Math.abs(this.units.generals[ii].habit)
-    }
-    for (let ii = 0; ii < this.units.units.length; ii++) {
-      sum += Math.abs(this.units.units[ii].habit)
-    }
+    
     for (let k in this.parties) {
-      for (let ii = 0; ii < this.parties[k]['members'].civilians.length; ii++) {
-        sum += Math.abs(this.parties[k]['members'].civilians[ii].habit)
-      }
-      for (let ii = 0; ii < this.parties[k]['members'].members.length; ii++) {
-        sum += Math.abs(this.parties[k]['members'].members[ii].habit)
-      }
-      for (let ii = 0; ii < this.parties[k]['members'].generals.length; ii++) {
-        sum += Math.abs(this.parties[k]['members'].generals[ii].habit)
-      }
-      for (let ii = 0; ii < this.parties[k]['members'].units.length; ii++) {
-        sum += Math.abs(this.parties[k]['members'].units[ii].habit)
+      let units = this.parties[k]['members'].civilians.concat(this.parties[k]['members'].members).concat(this.parties[k]['members'].units).concat(this.parties[k]['members']['generals'])
+      for (let unit of units) {
+        sum += Math.abs(unit.habit)
       }
     }
     return sum
   }
   
   change_habit() {
-    for (let ii = 0; ii < this.units['units'].length; ii++) {
-      this.units['units'][ii].change_habit()
+    let units = this.units.civilians.concat(this.units.members).concat(this.units.units)
+    for (let unit of units) {
+      unit.change_habit()
     }
-    for (let ii = 0; ii < this.units['civilians'].length; ii++) {
-      this.units['civilians'][ii].change_habit()
-    }
-    for (let ii = 0; ii < this.units['members'].length; ii++) {
-      this.units['members'][ii].change_habit()
-    }
-     for (let k in this.parties) {
-      for (let ii = 0; ii < this.parties[k]['members'].civilians.length; ii++) {
-        this.parties[k]['members'].civilians[ii].change_habit()
-      }
-      for (let ii = 0; ii < this.parties[k]['members'].members.length; ii++) {
-        this.parties[k]['members'].members[ii].change_habit()
-      }
-      for (let ii = 0; ii < this.parties[k]['members'].generals.length; ii++) {
-        this.parties[k]['members'].generals[ii].change_habit()
-      }
-      for (let ii = 0; ii < this.parties[k]['members'].units.length; ii++) {
-        this.parties[k]['members'].units[ii].change_habit()
+    
+    for (let k in this.parties) {
+      units = this.parties[k]['members'].civilians.concat(this.parties[k]['members'].members).concat(this.parties[k]['members'].units).concat(this.parties[k]['members']['generals'])
+      for (let unit of units) {
+        unit.change_habit()
       }
     }
   }
   
   total_item_value() {
     let sum = 0
-    for (let k in this.parties) {
-      if (this.parties[k]['members'].generals[0]['inventory']['items'].length) {
-        let items = this.parties[k]['members'].civilians[0]['inventory']['items']
+    
+    let units = this.units.civilians.concat(this.units.members)
+    for (let unit of units) {
+      if (unit['inventory']['items'].length) {
+        let items = unit['inventory']['items']
         for (let item of items) {
-          sum += item.value * 50
+          sum += item.value
         }
       }
-      
-      for (let ii = 0; ii < this.parties[k]['members'].members.length; ii++) {
-        if (this.parties[k]['members'].members[ii]['inventory']['items'].length) {
-          let items = this.parties[k]['members'].members[ii]['inventory']['items']
+    }
+    
+    for (let k in this.parties) {
+      units = this.parties[k]['members'].civilians.concat(this.parties[k]['members'].members).concat(this.parties[k]['members'].units).concat(this.parties[k]['members']['generals'])
+      for (let unit of units) {
+        if (unit['inventory']['items'].length) {
+          let items = unit['inventory']['items']
           for (let item of items) {
-            sum += item.value * 50
-          }
-        }
-      }
-      
-      for (let ii = 0; ii < this.parties[k]['members'].civilians.length; ii++) {
-        if (this.parties[k]['members'].civilians[ii]['inventory']['items'].length) {
-          let items = this.parties[k]['members'].civilians[ii]['inventory']['items']
-          for (let item of items) {
-            sum += item.value * 50
+            sum += item.value
           }
         }
       }
     }
+    
+    
     return sum
   }
   
   total_temperature() {
     let sum = 0
-    for (let ii = 0; ii < this.units.civilians.length; ii++) {
-      sum += this.units.civilians[ii].temp
-    }
-    for (let ii = 0; ii < this.units.members.length; ii++) {
-      sum += this.units.members[ii].temp
-    }
-    for (let ii = 0; ii < this.units.generals.length; ii++) {
-      sum += this.units.generals[ii].temp
-    }
-    for (let ii = 0; ii < this.units.units.length; ii++) {
-      sum += this.units.units[ii].temp
+    
+    let units = this.units.civilians.concat(this.units.members).concat(this.units.units)
+    for (let unit of units) {
+      sum += unit.temp
     }
     
     for (let k in this.parties) {
-      sum += Math.abs(this.parties[k]['members'].generals[0].temp)
-      
-      for (let ii = 0; ii < this.parties[k]['members'].members.length; ii++) {
-        sum += Math.abs(this.parties[k]['members'].members[ii].temp)
-      }
-      
-      for (let ii = 0; ii < this.parties[k]['members'].civilians.length; ii++) {
-        sum += Math.abs(this.parties[k]['members'].civilians[ii].temp)
-      }
-      
-      for (let ii = 0; ii < this.parties[k]['members'].units.length; ii++) {
-        sum += Math.abs(this.parties[k]['members'].units[ii].temp)
+      units = this.parties[k]['members'].civilians.concat(this.parties[k]['members'].members).concat(this.parties[k]['members'].units).concat(this.parties[k]['members']['generals'][0])
+      for (let unit of units) {
+        sum += unit.temp
       }
     }
     return sum
@@ -519,34 +563,18 @@ class Arena {
   }
   
   redistribute_temperature() {
-    let total_t = 0, total_habit = 0
-    total_t = this.total_temperature()
-    total_habit = this.total_habit()
-    for (let ii = 0; ii < this.units.civilians.length; ii++) {
-      this.units.civilians[ii].temp = total_t * (Math.abs(this.units.civilians[ii].habit) / total_habit)
-    }
-    for (let ii = 0; ii < this.units.members.length; ii++) {
-      this.units.members[ii].temp = total_t * (Math.abs(this.units.members[ii].habit) / total_habit)
-    }
-    for (let ii = 0; ii < this.units.generals.length; ii++) {
-      this.units.generals[ii].temp = total_t * (Math.abs(this.units.generals[ii].habit) / total_habit)
-    }
-    for (let ii = 0; ii < this.units.units.length; ii++) {
-      this.units.units[ii].temp = total_t * (Math.abs(this.units.units[ii].habit) / total_habit)
+    let total_t = this.total_temperature()
+    let total_habit = this.total_habit()
+    
+    let units = this.units.civilians.concat(this.units.members).concat(this.units.units)
+    for (let unit of units) {
+      unit.temp = total_t * (Math.abs(unit.habit) / total_habit)
     }
     
     for (let k in this.parties) {
-      for (let ii = 0; ii < this.parties[k]['members'].civilians.length; ii++) {
-        this.parties[k]['members'].civilians[ii].temp = total_t * (Math.abs(this.parties[k]['members'].civilians[ii].habit) / total_habit)
-      }
-      for (let ii = 0; ii < this.parties[k]['members'].members.length; ii++) {
-        this.parties[k]['members'].members[ii].temp = total_t * (Math.abs(this.parties[k]['members'].members[ii].habit) / total_habit)
-      }
-      for (let ii = 0; ii < this.parties[k]['members'].generals.length; ii++) {
-        this.parties[k]['members'].generals[ii].temp = total_t * (Math.abs(this.parties[k]['members'].generals[ii].habit) / total_habit)
-      }
-      for (let ii = 0; ii < this.parties[k]['members'].units.length; ii++) {
-        this.parties[k]['members'].units[ii].temp = total_t * (Math.abs(this.parties[k]['members'].units[ii].habit) / total_habit)
+      units = this.parties[k]['members'].civilians.concat(this.parties[k]['members'].members).concat(this.parties[k]['members'].units).concat(this.parties[k]['members']['generals'])
+      for (let unit of units) {
+        unit.temp = total_t * (Math.abs(unit.habit) / total_habit)
       }
     }
   }
@@ -604,9 +632,9 @@ class Arena {
   add_party_battle_jobs(job) {
     for (let j in this.parties) {
       for (let k in this.parties[j]['members']) {
-        for (let l in this.parties[j]['members'][k]) {
-          if (!this.parties[j]['members'][k][l]['jobs'].length || (this.parties[j]['members'][k][l]['jobs'].length && this.parties[j]['members'][k][l]['jobs'][0].id != 'battle')) {
-            this.parties[j]['members'][k][l]['jobs'].splice(0, 0, job)
+        for (let member of this.parties[j]['members'][k]) {
+          if (!member['jobs'].length || (member['jobs'].length && member['jobs'][0].id != 'battle')) {
+            member['jobs'].splice(0, 0, job)
           }
         }
       }
@@ -614,16 +642,10 @@ class Arena {
   }
   
   add_battle_jobs(job) {
-    this.add_party_battle_jobs(job)
-    
-    for (let j in this.units.members) {
-      if (!this.units.members[j]['jobs'].length || (this.units.members[j]['jobs'].length && this.units.members[j]['jobs'][0].id != 'battle')) {
-        this.units.members[j]['jobs'].splice(0, 0, job)
-      }
-    }
-    for (let j in this.units.civilians) {
-      if (!this.units.civilians[j]['jobs'].length || (this.units.civilians[j]['jobs'].length && this.units.civilians[j]['jobs'][0].id != 'battle')) {
-        this.units.civilians[j]['jobs'].splice(0, 0, job)
+    let units = this.units.members.concat(this.units.civilians)
+    for (let unit of units) {
+      if (!unit['jobs'].length || (unit['jobs'].length && unit['jobs'][0].id != 'battle')) {
+        unit['jobs'].splice(0, 0, job)
       }
     }
   }
@@ -631,58 +653,85 @@ class Arena {
   remove_jobs() {
     for (let j in this.parties) {
       for (let k in this.parties[j]['members']) {
-        for (let l in this.parties[j]['members'][k]) {
-          if (this.parties[j]['members'][k][l]['jobs'].length && this.parties[j]['members'][k][l]['jobs'][0].id == 'battle') {
-            this.parties[j]['members'][k][l]['jobs'].splice(0, 1)
+        for (let member of this.parties[j]['members'][k]) {
+          if (member['jobs'].length && member['jobs'][0].id == 'battle') {
+            member['jobs'].splice(0, 1)
           }
         }
       }
     }
-    for (let j in this.units.members) {
-      if (this.units.members[j]['jobs'].length && this.units.members[j]['jobs'][0].id == 'battle') {
-        this.units.members[j]['jobs'].splice(0, 1)
-      }
-    }
-    for (let j in this.units.civilians) {
-      if (this.units.civilians[j]['jobs'].length && this.units.civilians[j]['jobs'][0].id == 'battle') {
-        this.units.civilians[j]['jobs'].splice(0, 1)
+    
+    let units = this.units.members.concat(this.units.civilians)
+    for (let unit of units) {
+      if (unit['jobs'].length && unit['jobs'][0].id == 'battle') {
+        unit['jobs'].splice(0, 1)
       }
     }
   }
   
   update_units_jobs(units) {
     let movers = []
+    let moved = false
     let remove_idxs = []
+    let ongoing_battles = []
     
     for (let i in units) {
       let unit = units[i]
       if (unit.jobs.length) {
         switch (unit['jobs'][0].id) {
           case 'battle':
+            if (!ongoing_battles.length) {
+              ongoing_battles.push([unit['jobs'][0].x, unit['jobs'][0].y])
+            }
+            for (let j in ongoing_battles) {
+              if (unit['jobs'][0].x != ongoing_battles[j][0] && unit['jobs'][0].y != ongoing_battles[j][1]) {
+                ongoing_battles.push([unit['jobs'][0].x, unit['jobs'][0].y])
+              }
+            }
+            
             unit.progresso()
             if (unit['jobs'][0].index == unit['jobs'][0].enemies.length) {
-              let item = unit['jobs'][0].reward_item()
-              unit.inventory.add_item(item, 1)
+              let items = unit['jobs'][0].reward_items(10 * unit['jobs'][0].level)
+              for (let item of Object.keys(items.items)) {
+                unit.inventory.add_item(item, items.items[item])
+              }
+              let xp_drop = 0
+              for (let enemy of unit['jobs'][0].enemies) {
+                xp_drop += enemy.maxhealth / units.length
+              }
+              for (let person of units) {
+                person.xp += xp_drop
+              }
+              
+              for (let i in ongoing_battles) {
+                if (unit['jobs'][0].x == ongoing_battles[i][0] && unit['jobs'][0].y == ongoing_battles[i][1]) {
+                  ongoing_battles.splice(i, 1)
+                }
+              }
+              
               unit['jobs'].splice(0, 1)
               
               this.remove_jobs()
             }
             break
           case 'build':
-            if (this.check_progress('build')) {
-              unit['jobs'][0] = this.find_progress('build')
-            }
+            //if (this.check_progress('build')) {
+            //  unit['jobs'][0] = this.find_progress('build')
+            //}
             this.build_road(unit)
             break
           case 'move':
-            unit.progresso()
+            if (moved == false) {
+              unit.progresso()
+              moved = true
+            }
+              
             if (unit.task_done()) {
               let x = unit['jobs'][0].x
               let y = unit['jobs'][0].y
               
               unit['jobs'].splice(0, 1)
               
-              remove_idxs.push(i)
               movers.push([x, y, unit])
             }
             break
@@ -690,16 +739,21 @@ class Arena {
       }
     }
     
-    remove_idxs.sort(function(a, b) { return parseInt(b) - parseInt(a) })
-    for (let i in remove_idxs) {
-      units.splice(remove_idxs[i], 1)
+    for (let i in ongoing_battles) {
+      let hit = false
+      for (let unit of units) {
+        if (hit == false && unit['jobs'][0].x == ongoing_battles[i][0] && unit['jobs'][0].y == ongoing_battles[i][1]) {
+          unit.health -= randomNormal(unit['jobs'][0].enemies[0].attk, unit['jobs'][0].enemies[0].skill)
+          hit = true
+        }
+      }
     }
     
     return movers
   }
 }
 
-class Economy {
+class EconomySmall {
   constructor(size) {
     this.state = []
     for (let i = 0; i < size; i++) {
@@ -738,7 +792,7 @@ class Economy {
       return [3, Math.sqrt(summationx**2 + summationy**2)]
     }
     for (let i = 0; i < dirs.length; i++) {
-      if (parseFloat(Math.abs(my_dir - dirs[i]).toFixed(3)) <= Math.PI/8) {
+      if (Math.abs(my_dir - dirs[i]) <= Math.PI/8) {
         return [i, Math.sqrt(summationx**2 + summationy**2)]
       }
     }
@@ -753,7 +807,7 @@ class World {
   constructor(size, unit_count) {
     this.size = size
     this.unit_count = unit_count
-    this.economy = new Economy(size)
+    this.economy = new EconomySmall(size)
     this.party_ids = []
     
     this.surface = []
@@ -874,7 +928,7 @@ class World {
     return path_job
   }
   
-  update_arena_economy(god, x, y) {
+  update_arena_economy(player, x, y) {
     let arenas = []
     let center_arena = this.surface[x][y]
     
@@ -894,7 +948,7 @@ class World {
     center_arena.redistribute_temperature()
     
     // Adds an entry of surrounding average temperatures to the center arena's hist stack
-    arenas = center_arena.add_history(arenas, god)
+    arenas = center_arena.add_history(arenas, player)
     
     // Reads all history entries and returns a ( hist.length, 8 ) array
     let instructs = center_arena.hist.read_long_history()
@@ -902,7 +956,7 @@ class World {
     let [idx, mag] = this.economy.std_dir_idx(instructs)
     
     if (mag > 1) {
-      this.economy.update(x + Math.round(Math.cos(dirs[idx])), y - Math.round(Math.sin(dirs[idx])))
+      this.economy.update(x - Math.round(Math.sin(dirs[idx])), y + Math.round(Math.cos(dirs[idx])))
     }
     
     let count = 0
@@ -919,54 +973,56 @@ class World {
   }
   
   update_units_jobs(x, y) {
-    let movers = this.surface[x][y].update_units_jobs(this.surface[x][y].units.civilians)
+    let movers = this.surface[x][y].update_units_jobs(this.surface[x][y].units.civilians.concat(this.surface[x][y].units.members).concat(this.surface[x][y].units.generals))
+    let arena = this.surface[x][y]
     
     if (movers.length) {
-      for (let i = 0; i < movers.length; i++) {
-        if (this.surface[movers[i][0]][movers[i][1]].check_progress('battle')) {
+      if (this.surface[movers[0][0]][movers[0][1]].check_progress('battle')) {
+        for (let i = 0; i < movers.length; i++) {
           movers[i][2]['jobs'][0] = this.surface[movers[i][0]][movers[i][1]].find_progress('battle')
-        } else {
-          if (Math.random() < .25) {
-            let job = new BattleJob(movers[i][0], movers[i][1], this.surface[movers[i][0]][movers[i][1]].biome)
-            movers[i][2]['jobs'].splice(0, 0, job)
-            this.surface[movers[i][0]][movers[i][1]].add_battle_jobs(job)
-          }
         }
-        this.surface[movers[i][0]][movers[i][1]].units.civilians.push(movers[i][2])
       }
-    }
-    
-    movers = this.surface[x][y].update_units_jobs(this.surface[x][y].units.members)
-    if (movers.length) {
-      for (let i = 0; i < movers.length; i++) {
-        if (this.surface[movers[i][0]][movers[i][1]].check_progress('battle')) {
-          movers[i][2]['jobs'][0] = this.surface[movers[i][0]][movers[i][1]].find_progress('battle')
-        } else {
-          if (Math.random() < .25) {
-            let job = new BattleJob(movers[i][0], movers[i][1], this.surface[movers[i][0]][movers[i][1]].biome)
-            movers[i][2]['jobs'].splice(0, 0, job)
-            this.surface[movers[i][0]][movers[i][1]].add_battle_jobs(job)
+      
+      let removes = []
+      for (let i = 0; i < movers.length; i++) {        
+        for (let j = 0; j < arena['units']['civilians'].length; j++) {
+          if (JSON.stringify(movers[i][2]) == JSON.stringify(arena['units']['civilians'][j])) {
+            removes.push([j, 'civilians'])
           }
         }
-        this.surface[movers[i][0]][movers[i][1]].units.members.push(movers[i][2])
+        
+        for (let j = 0; j < arena['units']['members'].length; j++) {
+          if (JSON.stringify(movers[i][2]) == JSON.stringify(arena['units']['members'][j])) {
+            removes.push([j, 'members'])
+          }
+        }
+        
+        this.surface[movers[i][0]][movers[i][1]]['units'][movers[i][2].constructor.name.toLowerCase() + 's'].push(movers[i][2])
+      }
+      removes.sort(function(a, b) { return parseInt(b[0]) - parseInt(a[0]) })
+      for (let j in removes) {
+        arena['units'][removes[j][1]].splice(removes[j][0], 1)
+      }
+      
+      if (Math.random() < .25) {
+        let job = new BattleJob(movers[0][0], movers[0][1], this.surface[movers[0][0]][movers[0][1]].biome)
+        movers[0][2]['jobs'].splice(0, 0, job)
+        this.surface[movers[0][0]][movers[0][1]].add_battle_jobs(job)
       }
     }
   }
   
   update_party_jobs(party) {
-    for (let k in party['members']) {
-      let movers = this.surface[party.x][party.y].update_units_jobs(party['members'][k])
-      if (movers.length) {
-        party['members'][k].push(movers[0][2])
-        this.move_party(party, movers[0][0], movers[0][1])
-        if (this.surface[movers[0][0]][movers[0][1]].check_progress('battle')) {
-          this.surface[movers[0][0]][movers[0][1]].add_party_battle_jobs(this.surface[movers[0][0]][movers[0][1]].find_progress('battle'))
-        } else {
-          if (Math.random() < .25) {
-            let job = new BattleJob(movers[0][0], movers[0][1], this.surface[movers[0][0]][movers[0][1]].biome)
-            movers[0][2]['jobs'].splice(0, 0, job)
-            this.surface[movers[0][0]][movers[0][1]].add_party_battle_jobs(job)
-          }
+    let movers = this.surface[party.x][party.y].update_units_jobs(party['members']['civilians'].concat(party['members']['members']).concat(party['members']['generals']))
+    if (movers.length) {
+      this.move_party(party, movers[0][0], movers[0][1])
+      if (this.surface[movers[0][0]][movers[0][1]].check_progress('battle')) {
+        this.surface[movers[0][0]][movers[0][1]].add_party_battle_jobs(this.surface[movers[0][0]][movers[0][1]].find_progress('battle'))
+      } else {
+        if (Math.random() < .25) {
+          let job = new BattleJob(movers[0][0], movers[0][1], this.surface[movers[0][0]][movers[0][1]].biome)
+          movers[0][2]['jobs'].splice(0, 0, job)
+          this.surface[movers[0][0]][movers[0][1]].add_party_battle_jobs(job)
         }
       }
     }
@@ -1005,12 +1061,6 @@ class World {
   }
 }
 
-// The whole game: God balances generals against the economy
-// Theoretical considerations:
-//  How goes adding new units/generals
-//  Do we even need generals
-//  Are the mathematics general enough
-
 // How do we add generals
 
 // Consider the following:
@@ -1018,15 +1068,5 @@ class World {
 // the general considers the 8 arenas octile the center for avg temperature
 // each of the 8 arenas is incremented based on the general's hypothesis of history[-1]
 // ??? the [center arena/economy] is updated based on the whole of the arena's history ???
-
-// 1. General reading of 1-history -> returns value
-// 2. Redistribute temperatures
-// 3. Increment exvar based on clipping based on value
-// 4. Change opacity based on 10-history
-// and somehow the general's reading matters
-
-// Generals lift resources and communicate with the player. 
-// The player furnishes equipment out of the resources and
-// oversees operations on the ground
 
 // Might implement skills that are basically buffs

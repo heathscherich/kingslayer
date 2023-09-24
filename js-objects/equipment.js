@@ -1,44 +1,58 @@
 var equipment = {
+  "find": function(query) {
+    let my_equip = false
+    
+    for (let i of ['low', 'mid', 'high']) {
+      for (let j of ['weapons', 'armor']) {
+        for (let k of ['melee', 'range', 'magic', 'head', 'torso', 'legs']) {
+          if (equipment[i][j][k] && Object.keys(equipment[i][j][k]).includes(query)) {
+            my_equip = equipment[i][j][k][query]
+          }
+        }
+      }
+    }
+    return my_equip
+  },
   "low": {
     "weapons": {
       "melee": {
         "shortsword": {
           value: 5,
-          attack: 9.6,
+          attk: 9.6,
           skill: 30
         },
         "dagger": {
           value: 5,
-          attack: 5,
+          attk: 5,
           skill: 45
         },
         "sickle": {
           value: 5,
-          attack: 5,
+          attk: 5,
           skill: 30
         }
       },
       "range": {
         "shortbow": {
           value: 5,
-          attack: 2.5,
+          attk: 2.5,
           skill: 100
         },
         "sling": {
           value: 5,
-          attack: 2.5,
+          attk: 2.5,
           skill: 80
         }
       },
       "magic": {
         "staff": {
           value: 5,
-          attack: 6.25,
+          attk: 6.25,
           skill: 50.5
         },
         "crystal": {
           value: 5,
-          attack: 10,
+          attk: 10,
           skill: 30
         }
       }
@@ -82,52 +96,52 @@ var equipment = {
     "weapons": {
       "melee": {
         "longsword": {
-          value: 5,
-          attack: 110,
+          value: 10,
+          attk: 110,
           skill: 35
         },
         "glaive": {
-          value: 5,
-          attack: 200,
+          value: 10,
+          attk: 200,
           skill: 20
         },
         "cutlass": {
-          value: 5,
-          attack: 100,
+          value: 10,
+          attk: 100,
           skill: 50
         }
       },
       "range": {
         "longbow": {
-          value: 5,
-          attack: 30,
+          value: 10,
+          attk: 30,
           skill: 200
         },
         "smolbow": {
-          value: 5,
-          attack: 35,
+          value: 10,
+          attk: 35,
           skill: 200
         },
         "hand crossbow": {
-          value: 5,
-          attack: 45,
+          value: 10,
+          attk: 45,
           skill: 150
         }
       },
       "magic": {
         "battlestaff": {
-          value: 5,
-          attack: 70,
+          value: 10,
+          attk: 70,
           skill: 75.5
         },
         "catalyst": {
-          value: 5,
-          attack: 100,
+          value: 10,
+          attk: 100,
           skill: 100
         },
         "imbued book": {
-          value: 5,
-          attack: 100,
+          value: 10,
+          attk: 100,
           skill: 80
         }
       }
@@ -135,29 +149,29 @@ var equipment = {
     "armor": {
       "head": {
         "med helm": {
-          value: 5,
+          value: 10,
           defence: 25
         },
         "bone helm": {
-          value: 5,
+          value: 10,
           defence: 30
         }
       },
       "torso": {
         "chain torso": {
-          value: 5,
+          value: 10,
           defence: 35
         }
       },
       "legs": {
         "chainskirt": {
-          value: 5,
+          value: 10,
           defence: 30
         }
       },
       "rings": {
         "iron ring": {
-          value: 5,
+          value: 10,
           type: "ring"
         }
       }
@@ -167,47 +181,47 @@ var equipment = {
     "weapons": {
       "melee": {
         "greatsword": {
-          value: 5,
-          attack: 1500,
+          value: 15,
+          attk: 1500,
           skill: 40
         },
         "trident": {
-          value: 5,
-          attack: 1200,
+          value: 15,
+          attk: 1200,
           skill: 240
         },
         "dusters": {
-          value: 5,
-          attack: 1500,
+          value: 15,
+          attk: 1500,
           skill: 100
         }
       },
       "range": {
         "greatbow": {
-          value: 5,
-          attack: 550,
+          value: 15,
+          attk: 550,
           skill: 300.5
         },
         "polaris crossbow": {
-          value: 5,
-          attack: 650,
+          value: 15,
+          attk: 650,
           skill: 150
         },
         "hand harpoon": {
-          value: 5,
-          attack: 500,
+          value: 15,
+          attk: 500,
           skill: 50
         }
       },
       "magic": {
         "tome": {
-          value: 5,
-          attack: 375,
+          value: 15,
+          attk: 375,
           skill: 75
         },
         "wand": {
-          value: 5,
-          attack: 450,
+          value: 15,
+          attk: 450,
           skill: 100
         }
       }
@@ -215,25 +229,25 @@ var equipment = {
     "armor": {
       "head": {
         "full helm": {
-          value: 5,
+          value: 15,
           defence: 75
         }
       },
       "torso": {
         "platebody": {
-          value: 5,
+          value: 15,
           defence: 90
         }
       },
       "legs": {
         "platelegs": {
-          value: 5,
+          value: 15,
           defence: 80
         }
       },
       "rings": {
         "gold ring": {
-          value: 5,
+          value: 15,
           type: "ring"
         }
       }
