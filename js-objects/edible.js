@@ -1,0 +1,1 @@
+var edible = ['meat', 'honey', 'fruits', 'vegetables', 'mushroom', 'fish']

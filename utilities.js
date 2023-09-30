@@ -10,6 +10,228 @@ function randomNormal(mean, std) {
   return z * std + mean
 }
 
+function scanFilesForValue(item) {
+  for (let i of ['desert', 'jungle', 'city', 'ocean']) {
+    if (resources[item] && resources[item][i]) {
+      return resources[item][i].value
+    }
+  }
+  for (let i of ['low', 'mid', 'high']) {
+    for (let j of ['weapons', 'armor']) {
+      for (let k of ['melee', 'range', 'magic', 'head', 'torso', 'legs', 'ring']) {
+        if (equipment[i][j][k] && equipment[i][j][k][item]) {
+          return equipment[i][j][k][item].value
+        }
+      }
+    }
+  }
+  return 0
+}
+
+function drop_roll(table) {
+  let total = 0
+  let keys = Object.keys(table)
+  for(let i = 0; i < keys.length; i++) {
+    total += table[keys[i]].odds
+  }
+  let running_total = 0
+  let number = Math.floor(Math.random() * total)
+  let drop = ''
+
+  for(let i = 0; i < keys.length; i++) {
+    running_total += table[keys[i]].odds
+    
+    if(drop.length == 0 && running_total > number) {
+      drop = keys[i]
+    }
+  }
+  return drop
+}
+
+class Pathing {
+  constructor(start, goal) {
+    this.start = start
+    this.goal = goal
+    
+    this.to_visit = []
+
+    this.x = start[0]
+    this.y = start[1]
+
+    this.tiles = []
+    for (let i = 0; i < C_TILES; i++) {
+      this.tiles.push([])
+      for (let j = 0; j < C_TILES; j++) {
+        this.tiles[this.tiles.length - 1].push([])
+      }
+    }
+
+    this.tiles = this.resetProperties(this.tiles, [this.x, this.y])
+  }
+  
+  resetProperties(_tiles, pos) {
+    for(let i=0; i<_tiles.length; i++) {
+      for(let j=0; j<_tiles.length; j++) {
+        _tiles[i][j].prev = undefined
+        _tiles[i][j].score = 0
+        if(i == pos[0] && j == pos[1]) {
+          _tiles[i][j].visited = true
+        } else {
+          _tiles[i][j].visited = false
+        }
+      }
+    }
+    return _tiles
+  }
+  
+  cycle(world) {
+    let arr = [[this.x, this.y + 1], [this.x - 1, this.y], [this.x + 1, this.y], [this.x, this.y - 1]]
+
+    for (let i=0; i<arr.length; i++) {
+      let subsequent = [parseInt(arr[i][0]), parseInt(arr[i][1])]
+      
+      if(subsequent[0] >= 0 && subsequent[1] >= 0 && subsequent[0] < C_TILES && subsequent[1] < C_TILES) {
+
+        if(JSON.stringify(subsequent) == JSON.stringify(this.goal)) {
+          if(JSON.stringify([this.x, this.y]) != JSON.stringify(this.start)) {
+            this.tiles[subsequent[0]][subsequent[1]].prev = [this.x, this.y]
+          }
+
+          this.tiles[subsequent[0]][subsequent[1]].visited = true
+
+          let path = []
+          if(typeof(this.tiles[subsequent[0]][subsequent[1]].prev) != 'undefined') {
+            while(typeof(this.tiles[subsequent[0]][subsequent[1]].prev) != 'undefined') {
+              let old_x = subsequent[0]
+              let old_y = subsequent[1]
+              
+              subsequent = this.tiles[subsequent[0]][subsequent[1]].prev
+              path.push([old_x, old_y])
+            }
+            path.push(subsequent)
+          } else {
+            path.push(subsequent)
+          }
+          let path_job = []
+          while (path.length) {
+            let p = path.pop()
+            if (world.surface[p[0]][p[1]].road) {
+              path_job.push(new MoveJob(p[0], p[1], ROAD_MOD))
+            } else {
+              path_job.push(new MoveJob(p[0], p[1], 1))
+            }
+          }
+          return path_job
+        } else if (this.tiles[subsequent[0]][subsequent[1]].visited == false) {
+          if(JSON.stringify([this.x, this.y]) != JSON.stringify(this.start)) {
+            this.tiles[subsequent[0]][subsequent[1]].prev = [this.x, this.y]
+          }
+
+          let tile_score = 1
+          if (world.surface[subsequent[0]][subsequent[1]].road == true) {
+            tile_score = .45
+          }
+          this.tiles[subsequent[0]][subsequent[1]].visited = true
+          this.tiles[subsequent[0]][subsequent[1]].score = this.tiles[this.x][this.y].score + tile_score
+          this.to_visit.push({x: subsequent[0], y: subsequent[1], score: this.tiles[this.x][this.y].score + tile_score})
+        }
+      }
+    }
+
+    this.to_visit = this.to_visit.sort(function(a, b) { return b.score - a.score })
+    let coords = this.to_visit.pop()
+
+    if (typeof(coords) == 'undefined') {
+      return
+    }
+
+    this.x = coords.x
+    this.y = coords.y
+  }
+  
+  findPath(world) {
+    let moveJob
+    while (!moveJob) {
+      moveJob = this.cycle(world)
+    }
+    return moveJob
+  }
+  
+  getCoverage() {
+    let coverage = []
+    for (let x = 0; x < C_TILES; x++) {
+      for (let y = 0; y < C_TILES; y++) {
+        if (this.tiles[x][y].visited == true) {
+          coverage.push([x, y])
+        }
+      }
+    }
+    return coverage
+  }
+}
+
+class Noise {
+  constructor(height, width) {
+    this.height = height
+    this.width = width
+    this.my2D = []
+    for (let i = 0; i < height; i++) {
+      this.my2D.push([])
+      for (let j = 0; j < width; j++) {
+        this.my2D[i].push(0)
+      }
+    }
+  }
+  
+  interpolate(a0, a1, w) { return (a1 - a0) * w + a0 }
+
+  dotGridGrad(grads, ix, iy, x, y) {
+    let vals = [Math.cos(grads[ix + 1][iy + 1]), Math.sin(grads[ix + 1][iy + 1])]
+    
+    let dx = x - ix
+    let dy = y - iy
+    
+    return dx * vals[0] + dy * vals[1]
+  }
+
+  perlin(rands, x, y) {
+    let x0 = Math.floor(x)
+    let x1 = x0 + 1
+    let y0 = Math.floor(y)
+    let y1 = y0 + 1
+    
+    let sx = x - x0
+    let sy = y - y0
+    
+    let n0 = this.dotGridGrad(rands, x0, y0, x, y)
+    let n1 = this.dotGridGrad(rands, x1, y0, x, y)
+    let ix0 = this.interpolate(n0, n1, sx)
+
+    n0 = this.dotGridGrad(rands, x0, y1, x, y)
+    n1 = this.dotGridGrad(rands, x1, y1, x, y)
+    let ix1 = this.interpolate(n0, n1, sx)
+
+    let value = this.interpolate(ix0, ix1, sy)
+    return value
+  }
+
+  generate() {
+    let grads = []
+    for (let i = 0; i < this.height + 2; i++) {
+      grads.push([])
+      for (let j = 0; j < this.width + 2; j++) {
+        grads[i].push(Math.random() * 5)
+      }
+    }
+    for (let x = 0; x < this.height; x++) {
+      for (let y = 0; y < this.width; y++) {
+        this.my2D[x][y] = this.perlin(grads, x / 10, y / 10).toFixed(4)
+      }
+    }
+    return this.my2D
+  }
+}
+
 /**
 * Just an object essentially that takes two arguments
 * First, the number of stacks in the inventory
@@ -36,14 +258,17 @@ class Inventory {
       if (this.items[item] >= this.capacity) {
         this.items[item] = this.capacity
       }
+      return true
     } else {
       if (item_keys.length < this.size) {
         if (quantity > this.capacity) {
           quantity = this.capacity
         }
         this.items[item] = quantity
+        return true
       }
     }
+    return false
   }
 
   remove_item(item, quantity) {
@@ -71,23 +296,7 @@ class Inventory {
   
   getValue() {
     let sum = 0
-    function scanFilesForValue(item) {
-      for (let i of ['desert', 'jungle', 'city', 'ocean']) {
-        if (resources[item][i]) {
-          return resources[item][i].value
-        }
-      }
-      for (let i of ['low', 'mid', 'high']) {
-        for (let j of ['weapons', 'armor']) {
-          for (let k of ['melee', 'range', 'magic', 'head', 'torso', 'legs', 'ring']) {
-            if (equipment[i][j][k][item]) {
-              return equipment[i][j][k][item].value
-            }
-          }
-        }
-      }
-      return 0
-    }
+    
     if (Object.keys(this.items).length) {
       for (let item of Object.keys(this.items)) {
         sum += scanFilesForValue(item) * this.items[item]
@@ -111,7 +320,7 @@ class Bag extends Inventory {
 class Player {
   constructor() {
     this.strength = 1
-    this.storage = new Inventory(9999, 9999)
+    this.inventory = new Inventory(9999, 9999)
   }
 }
 
@@ -244,6 +453,7 @@ class General extends Unit {
     
     this.inventory = new Inventory(3, 5)
     this.inventory.add_item('dagger', 1)
+    this.inventory.add_item('seed', 5)
     this.jobs = []
     
     this.temp *= 5
@@ -271,6 +481,7 @@ class Civilian extends Unit {
     
     this.xp = 0
     this.health = 100
+    this.maxhealth = 100
     this.temp *= 2
     this.inventory = new Inventory(2, 3)
     this.jobs = []
@@ -346,7 +557,7 @@ class BattleJob extends Job {
     let enemies = []
     let ks = Object.keys(biomes[biome]['enemies'])
     let level = Math.floor(1 + Math.sqrt((x - places['base'][0])**2 + (y - places['base'][1])**2)/3.5)
-    
+    level += Math.abs(world.height[places['base'][0]][places['base'][1]] - world.height[x][y])
     let total_health = 0
     for (let i = 0; i < 5; i++) {
       let tag = ks[Math.floor(ks.length * Math.random())]
@@ -368,35 +579,36 @@ class BattleJob extends Job {
     this.enemies = enemies
   }
   
-  roll(table) {
-    let total = 0
-    let keys = Object.keys(table)
-    for(let i = 0; i < keys.length; i++) {
-      total += table[keys[i]].odds
-    }
-    let running_total = 0
-    let number = Math.floor(Math.random() * total)
-    let drop = ''
-
-    for(let i = 0; i < keys.length; i++) {
-      running_total += table[keys[i]].odds
-      
-      if(drop.length == 0 && running_total > number) {
-        drop = keys[i]
-      }
-    }
-    return drop
-  }
-  
-  reward_items(value) {
+  reward_items(value, difficulty) {
     let bag = new Bag(value)
     
     while (bag.getValue() < bag.maxValue) {
-      let item = this.roll(biomes[this.biome]['tables']['monster'])
-      bag.add_item(item, 1)
+      let roll = Math.random()
+      if (roll < .95) {
+        let item = drop_roll(biomes[this.biome]['tables']['monster'])
+        bag.add_item(item, 1)
+      } else if (roll < .99) {
+        let item = drop_roll(biomes[this.biome]['tables']['rare'])
+        bag.add_item(item, 1)
+      } else {
+        let tier = 'low'
+        if (difficulty < 10) {
+          tier = 'low'
+        } else if (difficulty < 20) {
+          tier = 'mid'
+        } else if (difficulty < 30) {
+          tier = 'high'
+        }
+        let item = drop_roll(biomes[this.biome]['tables']['equipment'][tier])
+        bag.add_item(item, 1)
+      }
     }
     
     return bag
+  }
+  
+  reward_trap() {
+    return drop_roll(biomes[this.biome]['tables']['trap'])
   }
   
   progresso(unit) {
@@ -405,7 +617,7 @@ class BattleJob extends Job {
     
     let dam = randomNormal(stats['attk'], stats['skill'])
     
-    while (dam > stats['attk'] + stats['attk'] * this.enemies[this.index].defence / 250 || dam < 0) {
+    while (dam > stats['attk'] + stats['attk'] / (this.enemies[this.index].defence / 250) || dam < 0) {
       dam = randomNormal(stats['attk'], stats['skill'])
     }
     
@@ -422,15 +634,59 @@ class BattleJob extends Job {
   }
 }
 
+class TrapJob extends Job {
+  constructor(x, y, biome) {
+    this.id = 'trap'
+    this.x = x
+    this.y = y
+    this.biome = biome
+    
+    super(100)
+  }
+  
+  progresso() {
+    super.progresso(10)
+  }
+}
+
+class Superstructure {
+  constructor(x, y, begin, cycle, crossed) {
+    this.x = x
+    this.y = y
+    this.details = begin()
+    this.func = cycle
+    this.stepped = crossed
+  }
+  
+  cycle() {
+    if (this.func) {
+      this.func()
+    }
+  }
+  
+  crossed(inventory) {
+    if (this.stepped) {
+      this.stepped(inventory)
+    }
+  }
+}
+
 class Arena {
-  constructor(count) {
+  constructor(count, biome) {
     this.units = {'units': [], 'civilians': [], 'members': [], 'generals': []}
     this.parties = {}
     
     this.hist = new History()
     
+    this.superstructure = undefined
+    
     this.road = false
-    this.biome = 'desert'
+    this.road_inventory = new Inventory(10, 3)
+    this.road_gain = new Job(100)
+    this.biome = biome
+    
+    this.battleChance = 1
+    this.attractionChance = undefined
     
     for (let i = 0; i < count; i++) {
       this.units['units'].push(new Unit())
@@ -493,7 +749,6 @@ class Arena {
       }
     }
     
-    
     return sum
   }
   
@@ -523,7 +778,32 @@ class Arena {
         party_membs += this.parties[ii]['members'][j].length
       }
     }
-    return temp_sum / ( party_membs + this.units.units.length + this.units.generals.length + this.units.members.length + this.units.civilians.length )
+    
+    let units_length = party_membs + this.units.units.length + this.units.generals.length + this.units.members.length + this.units.civilians.length
+    let denom = units_length
+    if (temp_sum == 0 && units_length == 0) {
+      denom = 1
+    }
+    return temp_sum / denom
+  }
+  
+  check_road() {
+    if (this.road) {
+      return true
+    } else {
+      return false
+    }
+  }
+  
+  update_road() {
+    if (this.road_gain.progress >= this.road_gain.max) {
+      let item = drop_roll(biomes[this.biome]['tables']['standard'])
+      this.road_inventory.add_item(item, 1)
+      this.road_gain.progress = 0
+    } else {
+      this.road_gain.progresso(2)
+    }
+   
   }
   
   check_civilian() {
@@ -597,6 +877,8 @@ class Arena {
             
       if (unit.task_done()) {
         this.road = true
+        this.road_type = unit['jobs'][0].road_type
+        creationPoints += 50
         unit['jobs'].splice(0, 1)
       }
     }
@@ -629,24 +911,20 @@ class Arena {
     }
   }
   
-  add_party_battle_jobs(job) {
+  add_party_jobs(job) {
     for (let j in this.parties) {
       for (let k in this.parties[j]['members']) {
         for (let member of this.parties[j]['members'][k]) {
-          if (!member['jobs'].length || (member['jobs'].length && member['jobs'][0].id != 'battle')) {
-            member['jobs'].splice(0, 0, job)
-          }
+          member['jobs'].splice(0, 0, job)
         }
       }
     }
   }
   
-  add_battle_jobs(job) {
+  add_jobs(job) {
     let units = this.units.members.concat(this.units.civilians)
     for (let unit of units) {
-      if (!unit['jobs'].length || (unit['jobs'].length && unit['jobs'][0].id != 'battle')) {
-        unit['jobs'].splice(0, 0, job)
-      }
+      unit['jobs'].splice(0, 0, job)
     }
   }
   
@@ -654,7 +932,7 @@ class Arena {
     for (let j in this.parties) {
       for (let k in this.parties[j]['members']) {
         for (let member of this.parties[j]['members'][k]) {
-          if (member['jobs'].length && member['jobs'][0].id == 'battle') {
+          if (member['jobs'].length) {
             member['jobs'].splice(0, 1)
           }
         }
@@ -663,7 +941,7 @@ class Arena {
     
     let units = this.units.members.concat(this.units.civilians)
     for (let unit of units) {
-      if (unit['jobs'].length && unit['jobs'][0].id == 'battle') {
+      if (unit['jobs'].length) {
         unit['jobs'].splice(0, 1)
       }
     }
@@ -691,7 +969,7 @@ class Arena {
             
             unit.progresso()
             if (unit['jobs'][0].index == unit['jobs'][0].enemies.length) {
-              let items = unit['jobs'][0].reward_items(10 * unit['jobs'][0].level)
+              let items = unit['jobs'][0].reward_items(10 * unit['jobs'][0].level, unit['jobs'][0].level)
               for (let item of Object.keys(items.items)) {
                 unit.inventory.add_item(item, items.items[item])
               }
@@ -709,8 +987,6 @@ class Arena {
                 }
               }
               
-              unit['jobs'].splice(0, 1)
-              
               this.remove_jobs()
             }
             break
@@ -719,6 +995,16 @@ class Arena {
             //  unit['jobs'][0] = this.find_progress('build')
             //}
             this.build_road(unit)
+            break
+          case 'trap':
+            unit.progresso()
+            
+            if (unit.task_done()) {
+              let item = unit['jobs'][0].reward_trap()
+              unit.inventory.add_item(item, 1)
+              
+              this.remove_jobs()
+            }
             break
           case 'move':
             if (moved == false) {
@@ -742,9 +1028,32 @@ class Arena {
     for (let i in ongoing_battles) {
       let hit = false
       for (let unit of units) {
-        if (hit == false && unit['jobs'][0].x == ongoing_battles[i][0] && unit['jobs'][0].y == ongoing_battles[i][1]) {
-          unit.health -= randomNormal(unit['jobs'][0].enemies[0].attk, unit['jobs'][0].enemies[0].skill)
+        if (hit == false && unit['jobs'][0]['id'] == 'battle' && unit['jobs'][0].x == ongoing_battles[i][0] && unit['jobs'][0].y == ongoing_battles[i][1]) {
           hit = true
+          let attk = unit['jobs'][0].enemies[unit['jobs'][0].index].attk
+          let dam = randomNormal(attk, unit['jobs'][0].enemies[unit['jobs'][0].index].skill)
+          
+          let stats = unit['inventory'].getEqpStats()
+          while (dam > attk + attk / (stats['defence'] / 250) || dam < 0) {
+            dam = randomNormal(attk, unit['jobs'][0].enemies[unit['jobs'][0].index].skill)
+          }
+          
+          unit.health -= dam
+          
+          if (unit.health / unit.maxhealth < .5) {
+            for (let item of Object.keys(unit.inventory.items)) {
+              if (edible.includes(item)) {
+                unit.inventory.remove_item(item, 1)
+                unit.health += 25
+              }
+            }
+          }
+          
+          if (unit.health <= 0) {
+            unit.health = 0
+            
+            movers.push([unit['jobs'][0].x, unit['jobs'][0].y, unit])
+          }
         }
       }
     }
@@ -804,7 +1113,13 @@ class EconomySmall {
 }
 
 class World {
-  constructor(size, unit_count) {
+  constructor(noise, size, unit_count) {
+    this.height = Object.assign({}, noise)
+    for (let i = 0; i < size; i++) {
+      for (let j = 0; j < size; j++) {
+        this.height[i][j] = Math.floor(this.height[i][j] / .05)
+      }
+    }
     this.size = size
     this.unit_count = unit_count
     this.economy = new EconomySmall(size)
@@ -815,7 +1130,63 @@ class World {
       this.surface.push([])
       
       for (let j = 0; j < size; j++) {
-        this.surface[this.surface.length - 1].push(new Arena(unit_count))
+        this.surface[this.surface.length - 1].push([])
+      }
+    }
+    
+    let firstNode = [5, 5]
+    let nodes = [ firstNode ]
+    for (let i = 1; i < Math.floor(this.size / (2 * firstNode[0])); i++) {
+      for (let j = 0; j <= i; j++) {
+        nodes.push([firstNode[0] + j * firstNode[0], i * 2 * firstNode[1]])
+        if (j != i) {
+          nodes.push([firstNode[0] + i * firstNode[0], j * 2 * firstNode[1]])
+        }
+      }
+    }
+    
+    let blooms = []
+    for (let node of nodes) {
+      blooms.push(new Pathing(node))
+    }
+    
+    let mod_dif
+    let counter = 500
+    while (counter) {
+      let roll = Math.floor(Math.random() * 5)
+      if (roll < 2) {
+        mod_dif = 0
+      } else if (roll < 4) {
+        mod_dif = 1
+      } else if (roll < 5) {
+        mod_dif = 2
+      }
+      for (let i = 0; i <= Math.floor(blooms.length / 3); i++) {
+        if (3 * i + mod_dif < blooms.length) {
+          blooms[3 * i + mod_dif].cycle(this)
+        }
+      }
+      
+      counter -= 1
+    }
+    
+    for (let bloom of blooms) {
+      let biome_roll = Object.keys(biomes)[Math.floor(Math.random() * (Object.keys(biomes).length - 1))]
+      
+      for (let i = 0; i < this.size; i++) {
+        for (let j = 0; j < this.size; j++) {
+          if (bloom.tiles[i][j].visited) {
+            this.surface[i][j] = new Arena(unit_count, biome_roll)
+          }
+        }
+      }        
+    }
+    
+    for (let i = 0; i < this.size; i++) {
+      for (let j = 0; j < this.size; j++) {
+        if (JSON.stringify(this.surface[i][j]) == '[]') {
+          this.surface[i][j] = new Arena(unit_count, 'desert')
+        }
       }
     }
   }
@@ -823,109 +1194,6 @@ class World {
   // Class copy from stackoverflow given current ES6 standards
   funcopy(myclass) {
     return Object.assign(Object.create(Object.getPrototypeOf(myclass)), myclass)
-  }
-  
-  path(start, goal) {
-    let paths = []
-    let to_visit = []
-
-    let my_x = start[0]
-    let my_y = start[1]
-
-    function resetTileProps(_tiles, pos) {
-      for(let i=0; i<_tiles.length; i++) {
-        for(let j=0; j<_tiles.length; j++) {
-          _tiles[i][j].prev = undefined
-          _tiles[i][j].score = 0
-          if(i == pos[0] && j == pos[1]) {
-            _tiles[i][j].visited = true
-          } else {
-            _tiles[i][j].visited = false
-          }
-        }
-      }
-      return _tiles
-    }
-
-    let tiles = []
-    for (let i = 0; i < C_TILES; i++) {
-      tiles.push([])
-      for (let j = 0; j < C_TILES; j++) {
-        tiles[tiles.length - 1].push([])
-      }
-    }
-
-    tiles = resetTileProps(tiles, [my_x, my_y])
-
-    let x = start[0]
-    let y = start[1]
-
-    while(paths.length == 0) {
-      let arr = [[x, y + 1], [x - 1, y], [x + 1, y], [x, y - 1]]
-
-      for (let i=0; i<arr.length; i++) {
-        let subsequent = [parseInt(arr[i][0]), parseInt(arr[i][1])]
-        
-        if(subsequent[0] >= 0 && subsequent[1] >= 0 && subsequent[0] < C_TILES && subsequent[1] < C_TILES) {
-
-          if(JSON.stringify(subsequent) == JSON.stringify(goal)) {
-            if(JSON.stringify([x, y]) != JSON.stringify(start)) {
-              tiles[subsequent[0]][subsequent[1]].prev = [x, y]
-            }
-
-            tiles[subsequent[0]][subsequent[1]].visited = true
-
-            let path = []
-            if(typeof(tiles[subsequent[0]][subsequent[1]].prev) != 'undefined') {
-              while(typeof(tiles[subsequent[0]][subsequent[1]].prev) != 'undefined') {
-                let old_x = subsequent[0]
-                let old_y = subsequent[1]
-                
-                subsequent = tiles[subsequent[0]][subsequent[1]].prev
-                path.push([old_x, old_y])
-              }
-              path.push(subsequent)
-            } else {
-              path.push(subsequent)
-            }
-            paths.push(path)
-          } else if (tiles[subsequent[0]][subsequent[1]].visited == false) {
-            if(JSON.stringify([x, y]) != JSON.stringify(start)) {
-              tiles[subsequent[0]][subsequent[1]].prev = [x, y]
-            }
-
-            let tile_score = 1
-            if (this.surface[subsequent[0]][subsequent[1]].road == true) {
-              tile_score = .45
-            }
-            tiles[subsequent[0]][subsequent[1]].visited = true
-            tiles[subsequent[0]][subsequent[1]].score = tiles[x][y].score + tile_score
-            to_visit.push({x: subsequent[0], y: subsequent[1], score: tiles[x][y].score + tile_score})
-          }
-        }
-      }
-
-      to_visit = to_visit.sort(function(a, b) { return b.score - a.score })
-      let coords = to_visit.pop()
-
-      if (typeof(coords) == 'undefined') {
-        return
-      }
-
-      x = coords.x
-      y = coords.y
-    }
-    
-    let path_job = []
-    while (paths[0].length) {
-      let p = paths[0].pop()
-      if (this.surface[p[0]][p[1]].road) {
-        path_job.push(new MoveJob(p[0], p[1], ROAD_MOD))
-      } else {
-        path_job.push(new MoveJob(p[0], p[1], 1))
-      }
-    }
-    return path_job
   }
   
   update_arena_economy(player, x, y) {
@@ -973,15 +1241,27 @@ class World {
   }
   
   update_units_jobs(x, y) {
-    let movers = this.surface[x][y].update_units_jobs(this.surface[x][y].units.civilians.concat(this.surface[x][y].units.members).concat(this.surface[x][y].units.generals))
+    let units = this.surface[x][y].units.civilians.concat(this.surface[x][y].units.members)
+    let removes = []
+    for (let i = 0; i < units.length; i++) {
+      if (units[i].health == 0) {
+        removes.push(i)
+      }
+    }
+    removes.sort(function(a, b) { b - a })
+    for (let i = 0; i < removes.length; i++) {
+      units.splice(removes[i], 1)
+    }
+    
+    let movers = this.surface[x][y].update_units_jobs(units)
     let arena = this.surface[x][y]
     
     if (movers.length) {
-      if (this.surface[movers[0][0]][movers[0][1]].check_progress('battle')) {
+      /*if (this.surface[movers[0][0]][movers[0][1]].check_progress('battle')) {
         for (let i = 0; i < movers.length; i++) {
           movers[i][2]['jobs'][0] = this.surface[movers[i][0]][movers[i][1]].find_progress('battle')
         }
-      }
+      }*/
       
       let removes = []
       for (let i = 0; i < movers.length; i++) {        
@@ -998,16 +1278,27 @@ class World {
         }
         
         this.surface[movers[i][0]][movers[i][1]]['units'][movers[i][2].constructor.name.toLowerCase() + 's'].push(movers[i][2])
+        if (this.surface[movers[i][0]][movers[i][1]].check_road()) {
+          let road_inv = this.surface[movers[i][0]][movers[i][1]].road_inventory
+          for (let j of Object.keys(road_inv.items)) {
+            if (movers[i][2]['inventory'][j] < movers[i][2]['inventory'].capacity) {
+              movers[i][2]['inventory'].add_item(road_inv.remove_item(j))
+            }
+          }
+        }
       }
       removes.sort(function(a, b) { return parseInt(b[0]) - parseInt(a[0]) })
       for (let j in removes) {
         arena['units'][removes[j][1]].splice(removes[j][0], 1)
       }
       
-      if (Math.random() < .25) {
+      if (Math.random() < .25 * this.surface[movers[0][0]][movers[0][1]].battleChance) {
         let job = new BattleJob(movers[0][0], movers[0][1], this.surface[movers[0][0]][movers[0][1]].biome)
+        this.surface[movers[0][0]][movers[0][1]].add_jobs(job)
+      } else if (this.surface[movers[0][0]][movers[1][0]].attractionChance && Math.random() < this.surface[movers[0][0]][movers[0][1]].attractionChance) {
+        let job = new TrapJob(movers[0][0], movers[0][1], this.surface[movers[0][0]][movers[0][1]].biome)
         movers[0][2]['jobs'].splice(0, 0, job)
-        this.surface[movers[0][0]][movers[0][1]].add_battle_jobs(job)
+        this.surface[movers[0][0]][movers[0][1]].add_jobs(job)
       }
     }
   }
@@ -1015,14 +1306,40 @@ class World {
   update_party_jobs(party) {
     let movers = this.surface[party.x][party.y].update_units_jobs(party['members']['civilians'].concat(party['members']['members']).concat(party['members']['generals']))
     if (movers.length) {
-      this.move_party(party, movers[0][0], movers[0][1])
-      if (this.surface[movers[0][0]][movers[0][1]].check_progress('battle')) {
-        this.surface[movers[0][0]][movers[0][1]].add_party_battle_jobs(this.surface[movers[0][0]][movers[0][1]].find_progress('battle'))
-      } else {
-        if (Math.random() < .25) {
+      for (let i = 0; i < movers.length; i++) {
+        if (movers[i][2].health == 0) {
+          for (let j of ['civilians', 'members']) {
+            for (let k = 0; k < party['members'][j].length; k++) {
+              if (movers.length && JSON.stringify(party['members'][j][k]) == JSON.stringify(movers[i][2])) {
+                let unit = party['members'][j][k]
+                party['members'][j].splice(k, 1)
+                unit['jobs'].splice(0)
+                this.surface[party.x][party.y]['units'][j].push(unit)
+                movers.splice(i, 1)
+              }
+            }
+          }
+        }
+      }
+      if (movers.length && movers[0][0] && movers[0][1]) {
+        this.move_party(party, movers[0][0], movers[0][1])
+        
+        if (this.surface[movers[0][0]][movers[0][1]].check_road()) {
+          let road_inv = this.surface[movers[0][0]][movers[0][1]].road_inventory
+          for (let j of Object.keys(road_inv.items)) {
+            if (!movers[0][2]['inventory'][j] || (movers[0][2]['inventory'][j] && movers[0][2]['inventory'][j] < movers[0][2]['inventory'].capacity)) {
+              movers[0][2]['inventory'].add_item(j, 1)
+              road_inv.remove_item(j, 1)
+            }
+          }
+        }
+        if (Math.random() < .25 * this.surface[movers[0][0]][movers[0][1]].battleChance) {
           let job = new BattleJob(movers[0][0], movers[0][1], this.surface[movers[0][0]][movers[0][1]].biome)
+          this.surface[movers[0][0]][movers[0][1]].add_party_jobs(job)
+        } else if (this.surface[movers[0][0]][movers[0][1]].attractionChance && Math.random() < this.surface[movers[0][0]][movers[0][1]].attractionChance) {
+          let job = new TrapJob(movers[0][0], movers[0][1], this.surface[movers[0][0]][movers[0][1]].biome)
           movers[0][2]['jobs'].splice(0, 0, job)
-          this.surface[movers[0][0]][movers[0][1]].add_party_battle_jobs(job)
+          this.surface[movers[0][0]][movers[0][1]].add_party_jobs(job)
         }
       }
     }
@@ -1058,6 +1375,19 @@ class World {
     delete this.surface[party.x][party.y].parties[party.id]
     party.move_party(x, y)
     this.surface[x][y].parties[party.id] = party
+  }
+  
+  heal_arena(x, y) {
+    for (let i of ['civilians', 'members']) {
+      for (let j = 0; j < this.surface[x][y]['units'][i].length; j++) {
+        if (this.surface[x][y]['units'][i][j]['health'] < 100) {
+          this.surface[x][y]['units'][i][j]['health'] += 2.5
+          if (this.surface[x][y]['units'][i][j]['health'] > 100) {
+            this.surface[x][y]['units'][i][j]['health'] = 100
+          }
+        }          
+      }
+    }
   }
 }
 

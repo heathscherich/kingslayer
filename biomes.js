@@ -1,6 +1,6 @@
 function extend(A, B) {
-  for (key in Object.keys(B)) {
-    if (!(key in Object.keys(A))) {
+  for (let key of Object.keys(B)) {
+    if (!Object.keys(A).includes(key)) {
       A[key] = B[key]
     }
   }
@@ -22,6 +22,10 @@ var biomes = {
         'meat': resources.meat.desert,
         'jewels': resources.jewels.desert,
         'bone': resources.bone.desert
+      },
+      trap: {
+        'salamander': { 'value': 15, 'odds': 10},
+        'snake': {'value': 30, 'odds': 5}
       },
       equipment: {
         'low': {
@@ -82,6 +86,10 @@ var biomes = {
         'silk': resources.silk.jungle,
         'mushroom': resources.mushroom.jungle,
         'paper': resources.paper.jungle
+      },
+      trap: {
+        'spider': { 'value': 15, 'odds': 10},
+        'scorpion': {'value': 30, 'odds': 5}
       },
       equipment: {
         'low': {
@@ -147,6 +155,10 @@ var biomes = {
         'polyester': resources.polyester.city,
         'paper': resources.paper.city
       },
+      trap: {
+        'rat': { 'value': 15, 'odds': 10},
+        'seagull': {'value': 30, 'odds': 5}
+      },
       equipment: {
         'low': {
           'shortbow': extend(equipment.low.weapons.range['shortbow'], { odds: 5 }),
@@ -209,6 +221,10 @@ var biomes = {
         'silver': resources.silver.ocean,
         'coal': resources.coal.ocean,
         'polyester': resources.polyester.ocean
+      },
+      trap: {
+        'snail': { 'value': 15, 'odds': 10},
+        'coral': {'value': 30, 'odds': 5}
       },
       equipment: {
         'low': {

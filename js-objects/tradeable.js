@@ -1,0 +1,1 @@
+var tradeable = ['bow', 'wooden ring', 'carriage', 'civilian idol', 'leather helm', 'leather torso', 'leather chaps', 'sling', 'chisel', 'bone helm', 'basket', "rabbit's foot", 'scanner', 'sleeping bag', 'lure', 'crystal', 'staff', 'minor attack potion', 'minor defence potion', 'seed', 'paper', 'sand', 'fur', 'wood', 'rock']

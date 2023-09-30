@@ -12,6 +12,7 @@ var resources = {
   silver: { ocean: { value: 9, odds: 3 }, desert: { value: 9, odds: 1 }, jungle: { value: 9, odds: 4 }, city: { value: 9, odds: 1 } },
   gold: { ocean: { value: 9, odds: 3 }, desert: { value: 9, odds: 0 }, jungle: { value: 9, odds: 3 }, city: { value: 9, odds: 3 } },
   water: { ocean: { value: 4, odds: 10 }, desert: { value: 4, odds: 0 }, jungle: { value: 4, odds: 5 }, city: { value: 4, odds: 3 } },
+  string: { ocean: { value: 2, odds: 2 }, desert: { value: 2, odds: 4 }, jungle: { value: 2, odds: 1 }, city: { value: 2, odds: 0 } },
   polyester: { ocean: { value: 6, odds: 1 }, desert: { value: 6, odds: 0 }, jungle: { value: 6, odds: 0 }, city: { value: 6, odds: 5 } },
   silk: { ocean: { value: 7, odds: 0 }, desert: { value: 7, odds: 0 }, jungle: { value: 7, odds: 3 }, city: { value: 7, odds: 3 } },
   sand: { ocean: { value: 2, odds: 5 }, desert: { value: 2, odds: 10 }, jungle: { value: 2, odds: 2 }, city: { value: 2, odds: 0 } },

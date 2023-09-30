@@ -4,6 +4,14 @@
       background-color: #333333
     }
     
+    h2 {
+      margin: 24px;
+    }
+    
+    h2 div {
+      margin: 8px;
+    }
+    
     .big-box {
       display: flex;
     }
@@ -40,7 +48,6 @@
       margin: 8px;
       padding: 12px;
       width: 512px;
-      height: 392px;
       background-color: #333333;
     }
     
@@ -66,6 +73,8 @@
     .assignButton {
       display: flex;
       margin: 12px 24px;
+      background-color: initial !important;
+      width: 142px;
     }
     
     .assignButton > .modifierButton {
@@ -75,6 +84,7 @@
     
     .assignButton .crudbutton {
       margin: 0;
+      height: 42px;
     }
     
     .crudbutton {
@@ -104,20 +114,56 @@
       color: #333333;
     }
     
-    #general-cards {
+    .stripes div {
+      padding: 4px;
+    }
+    
+    .stripes div:nth-child(even) {
+      background-color: #222222
+    }
+    
+    #kings-cards, #view-cards {
       border: 2px solid black;
       margin: 12px;
       padding: 20px;
       background-color: #333333;
     }
     
+    #view-cards {
+      outline: black solid 3px;
+      outline-offset: -16px;
+    }
+    
+    #road-radio {
+      display: inline-flex;
+      color: white;
+      font-size: 24px;
+      padding-top: 12px;
+    }
+    
+    #road-radio div {
+      padding-left: 24px;
+    }
+    
+    #road-radio:hover {
+      cursor: pointer;
+    }
+    
     #build-button {
-      margin: 0 12 12 12;
+      margin: 12 12 12 24;
       height: 32px;
       width: 80px;
       background-color: grey;
       border: 0px;
       font: 24px Tahoma black;
+    }
+    
+    #skills-menu {
+      display: inline-block;
+    }
+    
+    #skills-menu button {
+      background: linear-gradient(to right, #444444 0%, #355435 100%);
     }
     
     @media (max-width: 1024px) {
@@ -139,7 +185,10 @@
         </div>
         <div id="player-menu"></div>
       </div>
-      <div id="general-cards"></div>
+      <div style="display: inline-flex;">
+        <div id="kings-cards"></div>
+        <div id="view-cards"></div>
+      </div>
     </div>
     
   </div>
@@ -149,10 +198,13 @@
     menu = document.getElementById('menu')
     
     C_UNITS = 6
-    C_TILES = 20
+    C_TILES = 50
+    
+    MAPX = 17
+    MAPY = 10
     
     ROAD_MOD = .5
-    
+        
     var world, you, troupes, brigands
     
     function add_general(x, y) {
@@ -171,26 +223,58 @@
         player.storage.add_item(k, number)
       }
     }
+    
+    function update_generators() {
+      for (let tech of Object.keys(you['inventory']['items'])) {
+        if (tech.substring('generator')) {
+          for (let i of ['woodworking', 'stoneworking', 'clothier', 'crafting', 'outdoors', 'alchemy']) {
+            if (technology[i][tech]) {
+              technology[i][tech].job.progresso(10)
+              
+              if (technology[i][tech].job.progress == technology[i][tech].job.max) {
+                technology[i][tech].complete(you['inventory'])
+                technology[i][tech].job = new Job(100)
+              }
+            }
+          }
+        }
+      }
+    }
 
     function update_units() {
       people = []
       for (let i = 0; i < C_TILES; i++) {
         for (let j = 0; j < C_TILES; j++) {
           world.change_habit(i, j)
+          world.heal_arena(i, j)
           world.update_arena_economy(you, i, j)
           
           if (world.check_member(i, j) || world.check_civ(i, j)) {
             people.push([i, j])
+          }
+          
+          if (world.surface[i][j].superstructure) {
+            world.surface[i][j].superstructure.cycle()
+          }
+          
+          if (world.surface[i][j].check_road()) {
+            world.surface[i][j].update_road()
           }
         }
       }
       
       for (let i in people) {
         world.update_units_jobs(people[i][0], people[i][1])
+        if (world.surface[people[i][0]][people[i][1]].superstructure) {
+          world.surface[people[i][0]][people[i][1]].superstructure.crossed(people[i].inventory)
+        }
       }
       
       for (let i in troupes) {
         world.update_party_jobs(troupes[i])
+        if (world.surface[troupes[i].x][troupes[i].y].superstructure) {
+          world.surface[troupes[i].x][troupes[i].y].superstructure.crossed(troupes[i]['members']['generals'][0].inventory)
+        }
         
         /*
         if (world.surface[troupes[i].x][troupes[i].y]['units']['civilians'].length || world.surface[troupes[i].x][troupes[i].y]['units']['members'].length) {
@@ -252,110 +336,30 @@
       } else {
         document.getElementById('build-button').style.backgroundColor = 'gray'
       }
+      draw_map_view()
     }
     
-    function move_up(id) {
-      for (let i = 0; i < troupes.length; i++) {
-        if (troupes[i].id == id) {
-          [last_x, last_y] = last_xy(troupes[i])
-          let job
-          if (building_flag) {
-            if (world.surface[last_x][last_y].road) {
-              troupes[i]['members']['generals'][0]['jobs'].push(new MoveJob(last_x, last_y - 1, ROAD_MOD))
-            } else {
-              troupes[i]['members']['generals'][0]['jobs'].push(new MoveJob(last_x, last_y - 1, 1))
-            }
-            job = new BuildJob(last_x, last_y - 1, 25)
-          } else {
-            if (world.surface[last_x][last_y].road) {
-              job = new MoveJob(last_x, last_y - 1, ROAD_MOD)
-            } else {
-              job = new MoveJob(last_x, last_y - 1, 1)
-            }
-          }
-          troupes[i]['members']['generals'][0]['jobs'].push(job)
-          draw_cards()
-          return
+    function fillPath(x, y, id) {
+      let party
+      for (let troupe of troupes) {
+        if (troupe.id == id) {
+          party = troupe 
         }
       }
-    }
-    
-    function move_left(id) {
-      for (let i = 0; i < troupes.length; i++) {
-        if (troupes[i].id == id) {
-          [last_x, last_y] = last_xy(troupes[i])
-          let job
-          if (building_flag) {
-            if (world.surface[last_x][last_y].road) {
-              troupes[i]['members']['generals'][0]['jobs'].push(new MoveJob(last_x - 1, last_y, ROAD_MOD))
-            } else {
-              troupes[i]['members']['generals'][0]['jobs'].push(new MoveJob(last_x - 1, last_y, 1))
-            }
-            job = new BuildJob(last_x - 1, last_y, 25)
-          } else {
-            if (world.surface[last_x][last_y].road) {
-              job = new MoveJob(last_x - 1, last_y, ROAD_MOD)
-            } else {
-              job = new MoveJob(last_x - 1, last_y, 1)
-            }
-          }
-          troupes[i]['members']['generals'][0]['jobs'].push(job)
-          draw_cards()
-          return
+      coordPath = new Pathing([party.x, party.y], [x, y])
+      let moveJob = coordPath.findPath(world)
+      
+      if (building_flag) {
+        let buildCoords = []
+        
+        let len = moveJob.length
+        for (i = len - 1; i > -1; i--) {
+          moveJob.splice(i + 1, 0, new BuildJob(moveJob[i].x, moveJob[i].y, 20))
         }
       }
-    }
-    
-    function move_down(id) {
-      for (let i = 0; i < troupes.length; i++) {
-        if (troupes[i].id == id) {
-          [last_x, last_y] = last_xy(troupes[i])
-          let job
-          if (building_flag) {
-            if (world.surface[last_x][last_y].road) {
-              troupes[i]['members']['generals'][0]['jobs'].push(new MoveJob(last_x, last_y + 1, ROAD_MOD))
-            } else {
-              troupes[i]['members']['generals'][0]['jobs'].push(new MoveJob(last_x, last_y + 1, 1))
-            }
-            job = new BuildJob(last_x, last_y + 1, 25)
-          } else {
-            if (world.surface[last_x][last_y].road) {
-              job = new MoveJob(last_x, last_y + 1, ROAD_MOD)
-            } else {
-              job = new MoveJob(last_x, last_y + 1, 1)
-            }
-          }
-          troupes[i]['members']['generals'][0]['jobs'].push(job)
-          draw_cards()
-          return
-        }
-      }
-    }
-    
-    function move_right(id) {
-      for (let i = 0; i < troupes.length; i++) {
-        if (troupes[i].id == id) {
-          [last_x, last_y] = last_xy(troupes[i])
-          let job
-          if (building_flag) {
-            if (world.surface[last_x][last_y].road) {
-              troupes[i]['members']['generals'][0]['jobs'].push(new MoveJob(last_x + 1, last_y, ROAD_MOD))
-            } else {
-              troupes[i]['members']['generals'][0]['jobs'].push(new MoveJob(last_x + 1, last_y, 1))
-            }
-            job = new BuildJob(last_x + 1, last_y, 25)
-          } else {
-            if (world.surface[last_x][last_y].road) {
-              job = new MoveJob(last_x + 1, last_y, ROAD_MOD)
-            } else {
-              job = new MoveJob(last_x + 1, last_y, 1)
-            }
-          }
-          troupes[i]['members']['generals'][0]['jobs'].push(job)
-          draw_cards()
-          return
-        }
-      }
+      
+      party['members']['generals'][0]['jobs'] = moveJob
+      draw_map_view()
     }
     
     function clear_jobs(id) {
@@ -364,85 +368,19 @@
           a['members']['generals'][0]['jobs'] = []
         }
       })
-      draw_cards()
-    }
-    
-    function assign_jobs(id, number) {
-      for (let i = 0; i < troupes.length; i++) {
-        if (troupes[i].id == id) {
-          troupe = troupes[i]
-          let jobs = troupe['members']['generals'][0]['jobs']
-          
-          has_build = false
-          for (job of jobs) {
-            if (job.id == 'build') {
-              has_build = true
-            }
-          }
-          
-          if (jobs.length) {
-            troupe['members']['generals'][0]['jobs'] = []
-            let l = troupe['members']['members'].length
-            let num_members = number
-            if (number > l) {
-              num_members = l
-            }
-            for (let i = 0; i < num_members; i++) {
-              jobs.forEach(function(a) {
-                if(a.id == 'move') {
-                  troupe['members']['members'][l - i - 1]['jobs'].push(a)
-                } else {
-                  troupe['members']['members'][l - i - 1]['jobs'].push(a)
-                }
-              })
-            }
-            for (let i = 0; i < num_members; i++) {
-              let unit = troupe['members']['members'].pop()
-              world.surface[troupe.x][troupe.y].units['members'].push(unit)
-            }
-            if (number > l && !has_build) {
-              let c = troupe['members']['civilians'].length
-              let num_civs = number - num_members
-              
-              if (num_civs > c) {
-                num_civs = c
-              }
-              for (let i = 0; i < num_civs; i++) {
-                jobs.forEach(function(a) {
-                  if(a.id == 'move') {
-                    troupe['members']['civilians'][c - i - 1]['jobs'].push(a)
-                  } else {
-                    troupe['members']['civilians'][c - i - 1]['jobs'].push(a)
-                  }
-                })
-              }
-              for (let i = 0; i < num_civs; i++) {
-                let unit = troupe['members']['civilians'].pop()
-                world.surface[troupe.x][troupe.y].units['civilians'].push(unit)
-              }
-            }
-          }
-        }
-      }
-      draw_cards()
-    }
-    
-    function change_modifier(id) {
-      for (let i = 0; i < troupes.length; i++) {
-        if (troupes[i].id == id) {
-          troupes[i].increase_modifier()
-        }
-      }
-      draw_cards()
+      draw_map_view()
     }
     
     function return_to_base(id) {
       for (let i = 0; i < troupes.length; i++) {
         if (troupes[i].id == id) {
-          troupes[i]['members']['generals'][0]['jobs'] = world.path([troupes[i].x, troupes[i].y], [places['base'][0], places['base'][1]])
+          let base_path = new Pathing([troupes[i].x, troupes[i].y], [places['base'][0], places['base'][1]])
+          let moveJob = base_path.findPath(world)
+          
+          troupes[i]['members']['generals'][0]['jobs'] = moveJob
         }
       }
-      draw_cards()
+      draw_map_view()
     }
     
     function raise_civilian(id) {
@@ -451,27 +389,32 @@
           troupes[i].raise_civilian()
         }
       }
-      draw_cards()
+      draw_map_view()
     }
     
     function raise_to_party(id) {
-      for (let i = 0; i < troupes.length; i++) {
-        if (troupes[i].id == id) {
-          world.surface[troupes[i].x][troupes[i].y].units.units.pop()
-          troupes[i]['members']['civilians'].push(new Civilian())
+      if (troupePoints >= 1) {
+        troupePoints -= 1
+        for (let i = 0; i < troupes.length; i++) {
+          if (troupes[i].id == id && world.surface[troupes[i].x][troupes[i].y].units.units.length) {
+            world.surface[troupes[i].x][troupes[i].y].units.units.pop()
+            troupes[i]['members']['civilians'].push(new Civilian())
+          }
         }
+        draw_map_view()
       }
-      draw_cards()
     }
     
     function draw_player_menu() {
       let elm = document.getElementById("player-menu")
-      let html = '<div><div class="header1">Places</div>'
-      
+      let html = '<div><div class="header1">Here</div>'
+      html += troupes[0].x + ',' + troupes[0].y
+      /*
       for (let i in places) {
         html += i + ': ' + places[i][0] + ',' + places[i][1] + ' '
       }
       html += '</div>'
+      */
       
       /*
       html += '<div><div class="header1"></div>'
@@ -485,163 +428,54 @@
       elm.innerHTML = html
     }
     
-    function draw_cards() {
-      function string_id(k, v) {
-        if (v.length) {
-          let str = ''
-          for (let i = 0; i < v.length; i++) {
-            str += v[i].id + ': ' + v[i].x + ',' + v[i].y + ' '
-          }
-          return str
-        } else {
-          return v
-        }
-      }
-      function string_type(k, v) {
-        if (typeof(v) == 'object') {
-          let str = ''
-          let ks = Object.keys(v)
-          for (let i = 0; i < ks.length; i++) {
-            str += ks[i] + ': ' + v[ks[i]].length + ' '
-          }
-          return str
-        } else {
-          return ''
-        }
-      }
-      function calculate_width(troupe) {
-        if (troupe.members.generals[0].jobs.length) {
-          return 250 * (troupe.members.generals[0].jobs[0].progress / troupe.members.generals[0].jobs[0].max )
-        } else {
-          return 0
-        }
-      }
-      function calculate_width2(troupe) {
-        if (troupe.members.generals[0].jobs.length) {
-          return 250 * (troupe['members']['generals'][0]['jobs'][0].enemies[troupe['members']['generals'][0]['jobs'][0].index].health / troupe['members']['generals'][0]['jobs'][0].enemies[troupe['members']['generals'][0]['jobs'][0].index].maxhealth)
-        } else {
-          return 0
-        }
-      }
-      function calculate_width3(troupe) {
-        if (troupe.members.civilians.length) {
-          return 250 * (troupe.members.civilians[0].health / 100)
-        } else {
-          return 250
-        }
-        
-      }
-    
-      let elm = document.getElementById("general-cards")
-      let mapsize = 8
-      
-      let html = '<button id="build-button" onclick="build_button()">Build</button>'
-      for (let i = 0; i < troupes.length; i++) {
-        if (i % 2 == 0) {
-          html += '<div class="card-row">'
-        }
-        if (troupes[i]['members']['generals'][0]['jobs'].length && troupes[i]['members']['generals'][0]['jobs'][0].id == 'battle') {
-          html += '<div class="general-card">' + 
-                      '<div>Coordinates: ' + troupes[i].x + ',' + troupes[i].y + '</div>' +
-                      '<div>Troupe: ' + JSON.stringify(troupes[i]['members'], string_type) + '</div>' +
-                      '<div><div>Lv.' + troupes[i]['members']['generals'][0]['jobs'][0].level + ' (' + (troupes[i]['members']['generals'][0]['jobs'][0].index + 1) + '/' + troupes[i]['members']['generals'][0]['jobs'][0].enemies.length + ') ' + troupes[i]['members']['generals'][0]['jobs'][0].enemies[troupes[i]['members']['generals'][0]['jobs'][0].index].name[0].toUpperCase() + troupes[i]['members']['generals'][0]['jobs'][0].enemies[troupes[i]['members']['generals'][0]['jobs'][0].index].name.slice(1) + '</div>' + 
-                      '<div style="display: flex">' + 
-                      '<div><div style="background-color: black; width: 250px; height: 2px; margin: 0 auto;"><div style="color: white; height: 20px; width: ' + calculate_width(troupes[i]) + 'px;"><div style="margin-left: 4px; background-color: darkgray; height: 2px;"></div></div></div><div style="background-color: black; width: 250px; margin: 0 auto;"><div style="color: white; height: 20px; width: ' + calculate_width2(troupes[i]) + 'px;"><div style="margin-left: 4px; background-color: darkred; white-space: nowrap;">Enemy Health</div></div></div></div>' +
-                      '<div><div style="background-color: black; width: 250px; margin: 0 auto;"><div style="color: white; height: 20px; width: ' + calculate_width3(troupes[i]) + 'px;"><div style="margin-left: 4px; background-color: darkgray;">Progress</div></div></div></div>' +
-                      '</div></div></div>'
-        } else {
-          html += '<div class="general-card">' + 
-                      '<div>Coordinates: ' + troupes[i].x + ',' + troupes[i].y + '</div>' +
-                      '<div>Troupe: ' + JSON.stringify(troupes[i]['members'], string_type) + '</div>' +
-                      '<div>'
-                      if (troupes[i]['members']['generals'][0]['jobs'].length) {
-                        html += '<div class="jobs-text" onclick="clear_jobs(' + troupes[i].id + ')">Current Job: ' + troupes[i]['members']['generals'][0]['jobs'][0].id + ' ' + troupes[i]['members']['generals'][0]['jobs'][0].x + ',' + troupes[i]['members']['generals'][0]['jobs'][0].y + '</div>'
-                      }
-                      html += '<div class="jobs-text" onclick="clear_jobs(' + troupes[i].id + ')">Job List: ' + JSON.stringify(troupes[i]['members']['generals'][0]['jobs'].slice(1), string_id) + '</div></div>' +
-                      '<div><div style="background-color: black; width: 250px; margin: 0 auto;"><div style="background-color: darkgray; color: white; height: 20px; width: ' + calculate_width(troupes[i]) + ';"><div style="margin-left: 4px; background-color: darkgray;">Progress</div></div></div></div>' +
-                      '<div>' + JSON.stringify(troupes[i]['members']['generals'][0]['inventory']) + '</div>' +
-                      '<div style="display: inline-flex">' + 
-                      '<div style="margin-top: 12px; display: flex; flex-direction: column;">'
-                      for (let j = -mapsize; j <= mapsize; j++) {
-                        html += '<div style="display: inline-flex;">'
-                        for (let k = -mapsize; k <= mapsize; k++) {
-                          html += '<div style="height: 8px; width: 8px;" id="' + troupes[i].id + ',' + k + ',' + j + '"></div>'
-                        }
-                        html += '</div>'
-                      }
-                      html += '<button class="crudbutton2" style="margin: 12 auto 0 auto" onclick="move_up(' + troupes[i].id + ')">\u2191</button>' + 
-                      '<div style="margin-bottom: 12px;">' + 
-                      '<button class="crudbutton2" onclick="move_left(' + troupes[i].id + ')">\u2190</button>' + '<button class="crudbutton2" onclick="move_down(' + troupes[i].id + ')">\u2193</button>' + '<button class="crudbutton2" onclick="move_right(' + troupes[i].id + ')">\u2192</button>' + 
-                      '</div></div>' +
-                      '<table style="margin: 12 0 0 12">' +
-                      '<tr><td><button class="crudbutton" onclick="raise_to_party(' + troupes[i].id + ')">Raise Unit</button></td><td><button class="crudbutton" onclick="raise_civilian(' + troupes[i].id + ')">Raise Civilian</button></td></tr>' +
-                      '<tr><td><div class="assignButton"><button class="crudbutton" style="width: 92px" onclick="assign_jobs(' + troupes[i].id + ',' + modifiers[troupes[i].modifier_idx] + ')">Assign</button><button class="crudbutton modifierButton" onclick="change_modifier(' + troupes[i].id + ')">' + modifiers[troupes[i].modifier_idx] + '</button></div></td><td><button class="crudbutton" onclick="return_to_base(' + troupes[i].id + ')">Return</button></td></tr>' +
-                      '</table></div>' +
-                      '</div>'
-        }
-        if (i % 2 == 1) {
-          html += '</div>'
-        }
-      }
-      
-      html += '</table>'
-      
-      elm.innerHTML = html
-      
-      if (building_flag) {
-        document.getElementById('build-button').style.backgroundColor = 'black'
-      } else {
-        document.getElementById('build-button').style.backgroundColor = 'gray'
-      }
-      
-      for (let i in troupes) {
-        if (!troupes[i]['members']['generals'][0]['jobs'].length || (troupes[i]['members']['generals'][0]['jobs'].length && troupes[i]['members']['generals'][0]['jobs'][0].id != 'battle')) {
-          for (let j = -mapsize; j <= mapsize; j++) {
-            for (let k = -mapsize; k <= mapsize; k++) {
-              if (troupes[i].x + k >= 0 && troupes[i].x + k < C_TILES && troupes[i].y + j >= 0 && troupes[i].y + j < C_TILES) {
-                if (k != 0 || j != 0) {
-                  if (world.surface[troupes[i].x + k][troupes[i].y + j].road) {
-                    document.getElementById(troupes[i].id + ',' + k + ',' + j).style.backgroundColor = 'grey'
-                  } else {
-                    document.getElementById(troupes[i].id + ',' + k + ',' + j).style.backgroundColor = 'black'
-                  }
-                } else {
-                  document.getElementById(troupes[i].id + ',' + k + ',' + j).style.backgroundColor = 'white'
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    
+    var currentLoop = false
     function play() {
-      setTimeout(function() {
-        let has_job = false
-        troupes.forEach(function(a) {
-          if (a['members']['generals'][0]['jobs'].length) {
-            has_job = true
+      if (!currentLoop) {
+        currentLoop = setTimeout(function() {
+          let has_job = false
+          troupes.forEach(function(a) {
+            if (a['members']['generals'][0]['jobs'].length) {
+              has_job = true
+            }
+          })
+          currentLoop = false
+          if (has_job) {
+            bgl()            
+            play()
           }
-        })
-        if (has_job) {
-          bgl()
-          play()
-        }
-      }, 500)
+        }, 500)
+        currentLoop()
+      }
     }
     
     function bgl() {
+      update_generators()
       update_units()
       draw_player_menu()
-      draw_cards()
+      if (showSkillsMenu) {
+        make_skills_view()
+      } else {
+        draw_map_view()
+      }
     }
     
     function main() {
-      world = new World(C_TILES, C_UNITS)
+      noise = new Noise(C_TILES, C_TILES)
+      world = new World(noise.generate(), C_TILES, C_UNITS)
       you = new Player()
       
-      places = { 'base': [10, 10] }
-      troupes = [new Party(10, 10), new Party(10, 10)]
+      creationPoints = 0
+      troupePoints = 2
+      
+      places = { 'base': [25, 25] }
+      troupes = [new Party(25, 25)]
+      
+      for (let i = -2; i <= 2; i++) {
+        for (let j = -2; j <= 2; j++) {
+          world.surface[places['base'][0] + i][places['base'][1] + j].biome = 'desert'
+        }
+      }
+      
       
       for (let i = 0; i < troupes.length; i++) {
         world.add_party(troupes[i])
@@ -653,14 +487,17 @@
       }
       
       draw_player_menu()
-      draw_cards()
+      draw_map_view()
     }
   </script>
+  <script src="cards.js"></script>
   <script src="utilities.js"></script>
   <script src="economy.js"></script>
   <script src="js-objects/equipment.js"></script>
   <script src="js-objects/enemies.js"></script>
   <script src="js-objects/resources.js"></script>
   <script src="js-objects/secondaries.js"></script>
+  <script src="js-objects/edible.js"></script>
+  <script src="js-objects/tradeable.js"></script>
   <script src="biomes.js"></script>
 </body>
